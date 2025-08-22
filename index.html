@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>數字分析工具（雙檔合併總和）</title>
+  <title>數字分析工具（合併總和版）</title>
   <style>
     :root{--fg:#111;--muted:#6b7280;--border:#e5e7eb;--bg:#ffffff;--accent:#2563eb;}
     body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,"Noto Sans TC","PingFang TC",system-ui,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--fg);}
@@ -28,13 +28,12 @@
     .hint{margin-top:8px}
     .redline{border:2px solid #ef4444;border-radius:6px;padding:10px;margin:10px 0}
     .small{font-size:13px}
-    details summary{cursor:pointer; user-select:none}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>數字分析工具（雙檔總和）</h1>
-    <div class="muted small">來源：history.txt ＋ daily_results.txt（<b>不串接</b>，僅在結果階段相加）</div>
+    <h1>數字分析工具（合併總和版）</h1>
+    <div class="muted small">來源：history.txt ＋ daily_results.txt → 僅顯示<b>合併總和</b></div>
 
     <div class="row" style="margin-top:10px">
       <input id="seq" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="6"
@@ -48,24 +47,21 @@
 
     <div id="output" class="section" style="display:none">
       <div class="card">
-        <h3 style="margin:0 0 8px">合併總和（兩檔相加）</h3>
+        <h3 style="margin:0 0 8px">合併總和結果</h3>
         <div class="summary" id="sumHeader"></div>
         <div class="redline" id="oddEvenLine"></div>
         <div class="redline" id="bigSmallLine"></div>
         <div class="section">
-          <h3 style="margin:0 0 8px">二組加總對比表（合併）</h3>
+          <h3 style="margin:0 0 8px">二組加總對比表</h3>
           <div id="aggTable"></div>
         </div>
       </div>
 
-      <details class="section">
-        <summary>展開各檔案明細（history / daily 各自 6/5/4 碼表）</summary>
-        <div class="cards" id="detailCards"></div>
-      </details>
+      <div class="cards" id="detailCards"></div>
     </div>
 
     <div class="hint muted small">
-      使用方式：輸入 6 碼，按「查詢」。<span class="pill">6碼</span>、<span class="pill">5碼</span>、<span class="pill">4碼</span> 的結果會先在各檔案內獨立計算，最後將兩者結果<b>相加</b>後顯示合併總和。
+      使用方式：輸入 6 碼，按「查詢」。會同時計算 <span class="pill">6碼</span>、<span class="pill">5碼</span>、<span class="pill">4碼</span>，並輸出<b>合併總和</b>。
     </div>
   </div>
 
@@ -447,7 +443,6 @@
   let seqHist = [], seqDaily = []; let ready = false;
 
   function extractDigits16(text){
-    // 把文字裡所有 1~6 的數字依序擷取，形成序列
     const m = text.match(/[1-6]/g);
     return m ? m.map(x=>Number(x)) : [];
   }
@@ -500,12 +495,8 @@
     const full = els.seq.value;
     const patterns = [full, full.slice(1), full.slice(2)];
 
-    // per file
-    const H = patterns.map(p => analyzeOn(seqHist, p));
-    const D = patterns.map(p => analyzeOn(seqDaily, p));
+    const mergedPerPattern = patterns.map(p => addResults(analyzeOn(seqHist,p), analyzeOn(seqDaily,p)));
 
-    // 合併（兩檔相加，再對 6/5/4 做總和）
-    const mergedPerPattern = [ addResults(H[0],D[0]), addResults(H[1],D[1]), addResults(H[2],D[2]) ];
     const agg = {counts:{1:0,2:0,3:0,4:0,5:0,6:0}, total:0, odd:0, even:0, big:0, small:0};
     mergedPerPattern.forEach(r=>{
       agg.total += r.total; agg.odd += r.odd; agg.even += r.even; agg.big += r.big; agg.small += r.small;
@@ -517,7 +508,7 @@
 
     els.sumHeader.innerHTML =
       `<div class="summary">
-        <div style="margin-bottom:6px" class="muted">前三名（合併）：<b>${topTxt||'—'}</b></div>
+        <div style="margin-bottom:6px" class="muted">前三名：<b>${topTxt||'—'}</b></div>
         <div class="muted small">查詢序列：
           <span class="pill">${patterns[0]}</span>
           <span class="pill">${patterns[1]}</span>
@@ -543,24 +534,19 @@
       )
     );
 
-    // 各檔案明細
     els.detailCards.innerHTML='';
     const labels = ['6碼','5碼','4碼'];
-    [['history',H], ['daily',D]].forEach(([name,arr])=>{
-      arr.forEach((r,idx)=>{
-        const table = buildTable(
-          [['數字','次數','機率']].concat(
-            [...Array(6)].map((_,i)=>{
-              const d=i+1, c=r.counts[d], p=r.total? Math.round(c*100/r.total):0;
-              return [d,c,`${p}%`];
-            })
-          )
-        );
-        const card = document.createElement('div');
-        card.className = 'card third';
-        card.innerHTML = `<h3 style="margin:0 0 8px">${name}｜${labels[idx]}（${r.pattern}）</h3>${table}`;
-        els.detailCards.appendChild(card);
-      });
+    mergedPerPattern.forEach((r,idx)=>{
+      const table = buildTable([['數字','次數','機率']].concat(
+        [...Array(6)].map((_,i)=>{
+          const d=i+1, c=r.counts[d], p=r.total? Math.round(c*100/r.total):0;
+          return [d,c,`${p}%`];
+        })
+      ));
+      const card = document.createElement('div');
+      card.className = 'card third';
+      card.innerHTML = `<h3 style="margin:0 0 8px">${labels[idx]}（${r.pattern}）</h3>${table}`;
+      els.detailCards.appendChild(card);
     });
 
     els.output.style.display = 'block';
@@ -574,7 +560,6 @@
     return html;
   }
 
-  // events
   els.seq.addEventListener('input',()=>{ els.seq.value = sanitizeDigits(els.seq.value); maybeToggleSearch(); });
   els.search.addEventListener('click',()=>{ if (els.seq.value.length !== 6) return; render(); });
   els.clear.addEventListener('click',()=>{ els.seq.value=''; els.output.style.display='none'; maybeToggleSearch(); els.seq.focus(); });
